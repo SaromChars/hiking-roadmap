@@ -1,0 +1,14 @@
+{
+ "id": "baishuizhai",
+ "name": "白水寨风景名胜区",
+ "district": "增城",
+ "peak": "白水寨山",
+ "ele": 828,
+ "routes": 4,
+ "km_range": [
+  4.0,
+  16.8
+ ],
+ "difficulty": "难",
+ "thumb": "site/baishuizhai/thumb.jpg"
+}

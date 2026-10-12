@@ -1,0 +1,14 @@
+{
+ "id": "baiyun",
+ "name": "白云山",
+ "district": "越秀/白云",
+ "peak": "摩星岭",
+ "ele": 382,
+ "routes": 13,
+ "km_range": [
+  2.0,
+  8.5
+ ],
+ "difficulty": "中",
+ "thumb": "site/baiyun/thumb.jpg"
+}

@@ -1,0 +1,14 @@
+{
+ "id": "huangshanlu",
+ "name": "黄山鲁森林公园",
+ "district": "南沙",
+ "peak": "黄山鲁",
+ "ele": 295.3,
+ "routes": 5,
+ "km_range": [
+  2.5,
+  8.3
+ ],
+ "difficulty": "中",
+ "thumb": "site/huangshanlu/thumb.jpg"
+}

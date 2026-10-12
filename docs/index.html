@@ -1,0 +1,1135 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>广州徒步地形</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 布局：一屏应用。左侧 3D 场景（地标卡片、播放条与海拔剖面浮在场景上），右侧标签页侧栏（路线 / 地标 / 图层），侧栏内部滚动 */
+:root {
+  --bg: #eef1ea;
+  --panel: #f8faf5;
+  --ink: #1f2a22;
+  --muted: #5d6b60;
+  --line: #cfd8cb;
+  --accent: #b5562b;       /* 木棉红，广州市花 */
+  --accent-soft: #f3e1d6;
+  --stage: #b9c7d3;
+  --glass: rgba(18,22,20,.74);
+  --f-display: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121814; --panel: #19211c; --ink: #e3eadf; --muted: #93a396; --line: #2c3a31;
+    --accent: #e0814f; --accent-soft: #3a2519; --stage: #2a333b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121814; --panel: #19211c; --ink: #e3eadf; --muted: #93a396; --line: #2c3a31;
+  --accent: #e0814f; --accent-soft: #3a2519; --stage: #2a333b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); line-height: 1.5; }
+.app { height: 100%; display: flex; flex-direction: column; gap: 10px; padding-inline: 24px; padding-block: 18px 20px; max-width: 1696px; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 20px; flex: none; }
+h1 { font-family: var(--f-display); font-weight: 900; font-size: 24px; margin: 0; letter-spacing: .05em; }
+h1 small { font-family: var(--f-mono); font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: .06em; margin-left: 8px; }
+.sub { color: var(--muted); font-size: 12px; margin: 0; }
+.main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; }
+@media (max-width: 960px) {
+  html, body { height: auto; }
+  .app { height: auto; padding-inline: 16px; padding-block: 10px 16px; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 72vh; min-height: 440px; }
+  aside { max-height: none; }
+}
+
+/* ---- 场景 ---- */
+.stage { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--stage); min-height: 0; touch-action: none; user-select: none; }
+.stage canvas { display: block; width: 100%; height: 100%; outline: none; }
+.ov { position: absolute; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); pointer-events: none; font-family: var(--f-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.hud { left: 12px; top: 10px; display: flex; flex-direction: column; }
+.credit { right: 12px; top: 74px; font-family: var(--f-body); font-size: 10px; opacity: .8; text-align: right; max-width: 220px; }
+.compass { position: absolute; right: 12px; top: 10px; width: 56px; height: 56px; cursor: pointer; }
+.compass:focus-visible { outline: 2px solid var(--accent); border-radius: 50%; }
+.tip { position: absolute; pointer-events: none; background: var(--glass); color: #f1f4ef; border-radius: 4px; padding: 4px 8px; font-family: var(--f-mono); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; transform: translate(14px, -120%); }
+.loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--stage); color: var(--ink); font-size: 14px; }
+.loading .bar { width: 220px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.loading .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.status { left: 50%; top: 10px; transform: translateX(-50%); background: var(--glass); padding: 4px 12px; border-radius: 99px; text-shadow: none; font-family: var(--f-body); font-size: 12px; white-space: nowrap; max-width: calc(100% - 330px); overflow: hidden; text-overflow: ellipsis; }
+
+/* 场景上的玻璃面板：局部改写配色令牌，让里面的组件自动适配深色底 */
+.glass { --ink: #eef2ec; --muted: #a9b5ab; --line: rgba(255,255,255,.16); --accent: #ff8a50; --accent-soft: rgba(255,138,80,.22); --panel: #1c221f; --bg: rgba(255,255,255,.06);
+  position: absolute; background: var(--glass); color: var(--ink); border-radius: 8px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.poicard { left: 12px; top: 52px; width: min(300px, calc(100% - 24px)); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.poicard .x { position: absolute; right: 6px; top: 4px; border: none; background: none; color: var(--muted); font-size: 18px; padding: 2px 8px; line-height: 1; }
+.dock { left: 12px; right: 12px; bottom: 12px; padding: 8px 12px 6px; display: flex; flex-direction: column; gap: 4px; }
+.dock .player { color: var(--ink); }
+.dock .fold { margin-left: auto; }
+.dock.min .profile { display: none; }
+
+.label { font-size: 11px; letter-spacing: .14em; color: var(--muted); font-weight: 500; }
+.info h2 { font-family: var(--f-display); font-size: 22px; margin: 0; font-weight: 900; letter-spacing: .05em; padding-right: 20px; }
+.info .meta { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font-family: var(--f-mono); font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+.chip.plain { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.info p { margin: 0; font-size: 13px; }
+
+/* ---- 侧栏 ---- */
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); flex: none; }
+.tabs button { flex: 1; border: none; border-radius: 0; background: none; padding: 10px 0 9px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button[aria-selected=true] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+.pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.note { font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.55; }
+
+.ctrl { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; }
+.ctrl output { font-family: var(--f-mono); font-size: 12px; color: var(--muted); min-width: 3.6em; text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggles label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 3px 10px 3px 6px; border: 1px solid var(--line); border-radius: 99px; cursor: pointer; }
+.toggles input { accent-color: var(--accent); margin: 0; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+button { font: inherit; font-size: 13px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:focus-visible, .toggles label:focus-within, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.poilist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px 8px; }
+.poilist button { width: 100%; text-align: left; border: none; background: none; padding: 4px 6px; display: flex; justify-content: space-between; gap: 6px; border-radius: 3px; }
+.poilist button span:last-child { font-family: var(--f-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.poilist button.on { background: var(--accent-soft); color: var(--accent); }
+
+/* 路线 */
+.rlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.rlist button { width: 100%; text-align: left; display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 6px 10px; background: var(--bg); }
+.rlist button b { font-weight: 700; font-size: 13.5px; }
+.rlist button small { grid-column: 1 / -1; font-family: var(--f-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rlist button em { font-style: normal; font-size: 11px; color: var(--accent); align-self: center; }
+.rlist button.on { border-color: var(--accent); background: var(--accent-soft); }
+.rlist button.on b { color: var(--accent); }
+.rhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.rhead h3 { margin: 0; font-family: var(--f-display); font-size: 18px; font-weight: 900; letter-spacing: .04em; }
+.rhead p { margin: 0; font-size: 12.5px; color: var(--muted); flex-basis: 100%; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 6px; }
+.stat { border-left: 2px solid var(--line); padding-left: 7px; display: flex; flex-direction: column; min-width: 0; }
+.stat span { font-size: 11px; color: var(--muted); }
+.stat b { font-family: var(--f-mono); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.stat b small { font-size: 10.5px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+.stat em { font-style: normal; font-size: 10.5px; color: var(--muted); }
+.stat.hot { border-color: var(--accent); }
+.player { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; }
+.player input[type=range] { flex: 1 1 160px; min-width: 120px; }
+.player button { padding: 4px 10px; }
+.player select, .player input[type=number] { font: inherit; font-size: 12.5px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+.player input[type=number] { width: 56px; font-family: var(--f-mono); }
+.player label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.profile { width: 100%; height: 108px; display: block; cursor: crosshair; }
+table.segs { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.segs th { text-align: right; font-weight: 500; font-size: 10.5px; color: var(--muted); padding: 3px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.segs td { text-align: right; padding: 4px; border-bottom: 1px solid var(--line); font-family: var(--f-mono); font-size: 11.5px; white-space: nowrap; vertical-align: top; }
+.segs th:first-child, .segs td:first-child { text-align: left; white-space: normal; width: 100%; }
+.segs td:first-child { font-family: var(--f-body); font-size: 12.5px; }
+.segs td:first-child small { display: block; color: var(--muted); font-size: 10.5px; }
+.segs tbody tr { cursor: pointer; }
+.segs tbody tr:hover { background: var(--bg); }
+.segs tbody tr.cur { background: var(--accent-soft); }
+.segs tfoot td { font-weight: 600; border-bottom: none; }
+.mode { display: inline-block; font-size: 10.5px; padding: 0 5px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.mode.cable { border-color: var(--accent); color: var(--accent); }
+
+/* ---- 地点列表 ---- */
+.hgroup { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.back { flex: none; padding: 3px 10px; font-size: 12.5px; align-self: center; }
+.sites { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); grid-auto-rows: max-content; gap: 12px; align-content: start; padding: 2px; }
+.card { display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; border-radius: 6px; background: var(--panel); gap: 0; }
+.card img, .card .ph { display: block; width: 100%; aspect-ratio: 2 / 1; object-fit: cover; background: var(--stage); }
+.card .bd { padding: 9px 12px 11px; display: flex; flex-direction: column; gap: 5px; }
+.card .nm { display: flex; align-items: baseline; gap: 8px;  flex-wrap: wrap; }
+.card h2 { font-family: var(--f-display); font-weight: 900; font-size: 19px; margin: 0; letter-spacing: .05em; color: var(--ink); }
+.card .dist { font-size: 12px; color: var(--muted);  white-space: nowrap; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 5px; }
+.card:hover h2 { color: var(--accent); }
+.chip.d-易 { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.chip.d-难 { background: var(--accent); color: #fff; }
+.empty { color: var(--muted); font-size: 14px; padding: 24px 4px; }
+@media (max-width: 960px) { .sites { overflow: visible; } }
+@media (max-width: 600px) {
+  .sites { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .card { flex-direction: row; }
+  .card img, .card .ph { width: 104px; flex: none; aspect-ratio: 1; align-self: center; margin: 8px 0 8px 8px; border-radius: 4px; }
+  .card .bd { min-width: 0; }
+  .hgroup { align-items: flex-start; }
+  h1 small { display: block; margin-left: 0; }
+}
+.skipped { margin-top: -4px; }
+
+/* ---- 列表页的广州总览地图 ---- */
+.listmain { flex: 1 1 auto; min-height: 0; display: flex; gap: 16px; }
+.listmain .sites { flex: 1 1 0; min-width: 0; }
+.gzmap { --land: #f7f5ec; --dline: #c3cbbd; position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: var(--ar, 3 / 4); max-width: 52%;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); overflow: hidden; }
+.gzmap svg { display: block; width: 100%; height: 100%; }
+.gzmap .land { fill: var(--land); }
+.gzmap .relief { mix-blend-mode: multiply; }
+.gzmap .dpath { fill: none; stroke: var(--dline); stroke-width: 1.4; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.gzmap .shadow { filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)) drop-shadow(0 4px 10px rgba(0,0,0,.12)); isolation: isolate; }
+.gzmap .dlabel { font-family: var(--f-display); font-weight: 600; fill: var(--muted); stroke: var(--land); stroke-width: 5; paint-order: stroke; stroke-linejoin: round; text-anchor: middle; dominant-baseline: middle; pointer-events: none; letter-spacing: .15em; }
+.mk { cursor: pointer; outline: none; }
+.mk .hit { fill: transparent; }
+.mk .dot { fill: var(--accent); stroke: #fff; stroke-width: 2; vector-effect: non-scaling-stroke; transition: transform .12s; }
+.mk .ring { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; opacity: 0; }
+.mk:hover .dot, .mk.hl .dot, .mk:focus-visible .dot { transform: scale(1.45); }
+.mk.hl .ring, .mk:focus-visible .ring { opacity: 1; }
+.mtip { position: absolute; z-index: 2; width: 228px; pointer-events: none; background: var(--glass); color: #f1f4ef; border-radius: 6px; overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 12px; }
+.mtip.pinned { pointer-events: auto; cursor: pointer; }
+.mtip img { display: block; width: 100%; aspect-ratio: 2 / 1; object-fit: cover; }
+.mtip .bd { padding: 8px 11px 10px; display: flex; flex-direction: column; gap: 4px; }
+.mtip h3 { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 17px; letter-spacing: .05em; }
+.mtip h3 small { font-family: var(--f-body); font-weight: 400; font-size: 11.5px; color: #b9c4bb; margin-left: 8px; letter-spacing: 0; }
+.mtip dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-variant-numeric: tabular-nums; }
+.mtip dt { color: #a9b5ab; }
+.mtip dd { margin: 0; font-family: var(--f-mono); font-size: 11.5px; }
+.mtip .go { color: #ffb08a; font-size: 11.5px; margin-top: 2px; }
+.mcredit { position: absolute; left: 8px; bottom: 5px; font-size: 10px; color: var(--muted); pointer-events: none; }
+.card.hl { box-shadow: 0 0 0 2px var(--accent); }
+.card.hl h2 { color: var(--accent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gzmap { --land: #4a564d; --dline: #6c7a6f; } }
+:root[data-theme="dark"] .gzmap { --land: #4a564d; --dline: #6c7a6f; }
+@media (max-width: 960px) {
+  .listmain { flex-direction: column; }
+  .gzmap { height: auto; width: min(100%, calc(78vh * var(--ar-n, .75))); max-width: none; margin: 0 auto; }
+  .gzmap svg { height: auto; }
+}
+</style>
+
+<div class="app list" id="listView" hidden>
+  <header>
+    <h1>广州徒步地形<small>选一个地点，载入它的三维地形与路线</small></h1>
+    <p class="sub" id="listSub">真实高程 · 卫星影像 · OpenStreetMap 路网</p>
+  </header>
+  <div class="listmain">
+    <div class="gzmap" id="gzmap" hidden>
+      <svg id="mapSvg" role="group" aria-label="广州地图上的徒步地点"></svg>
+      <div class="mtip" id="mtip" hidden></div>
+      <div class="mcredit">区界 © OpenStreetMap · 晕渲 AWS Terrain Tiles</div>
+    </div>
+    <div class="sites" id="sites" aria-live="polite"><p class="empty">正在加载地点列表…</p></div>
+  </div>
+</div>
+
+<div class="app" id="viewer" hidden>
+  <header>
+    <div class="hgroup"><button class="back" id="back" type="button">← 全部地点</button><h1 id="siteTitle"><span id="siteName"></span><small id="siteSub"></small></h1></div>
+    <p class="sub">左键旋转 · 右键平移 · 滚轮缩放 · 点击地标飞过去</p>
+  </header>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="ov hud" id="hud"></div>
+      <div class="ov status" id="status" hidden></div>
+      <svg class="compass" id="compass" viewBox="-32 -32 64 64" tabindex="0" role="button" aria-label="指北针，点击转回正北">
+        <circle r="29" fill="rgba(20,24,22,.55)" stroke="rgba(255,255,255,.5)"/>
+        <g id="needle">
+          <path d="M0 -21 L6 0 L0 4 L-6 0Z" fill="#e0814f"/>
+          <path d="M0 21 L6 0 L0 -4 L-6 0Z" fill="#fff" opacity=".6"/>
+          <text y="-23" text-anchor="middle" font-size="9" font-family="var(--f-mono)" fill="#fff" dy="-1">N</text>
+        </g>
+      </svg>
+      <div class="ov credit">影像 Esri World Imagery · 高程 AWS Terrain Tiles · 地名路网 © OpenStreetMap</div>
+
+      <div class="glass poicard" id="poicard">
+        <button class="x" id="infoClose" aria-label="关闭地标卡片">×</button>
+        <div class="info" id="info" aria-live="polite" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <div class="glass dock" id="dock">
+        <div class="player">
+          <button id="play" aria-pressed="false">▶ 播放</button>
+          <button id="restart">从头</button>
+          <input id="prog" type="range" min="0" max="1000" value="0" aria-label="演示进度">
+          <label>倍速 <select id="speed"><option value="120">×120</option><option value="300" selected>×300</option><option value="600">×600</option><option value="1200">×1200</option></select></label>
+          <label><input type="checkbox" id="follow" checked> 镜头跟随</label>
+          <button class="fold" id="fold" aria-pressed="false" title="收起或展开海拔剖面">剖面 ▾</button>
+        </div>
+        <svg class="profile" id="profile" viewBox="0 0 800 108" role="img" aria-label="海拔剖面，点击可跳到该位置"></svg>
+      </div>
+
+      <div class="tip" id="tip" hidden></div>
+      <div class="loading" id="loading"><span id="loadTxt">正在加载卫星影像与高程…</span><div class="bar"><i id="loadBar"></i></div></div>
+    </div>
+
+    <aside>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="route">路线演示</button>
+        <button role="tab" aria-selected="false" data-tab="poi">地标</button>
+        <button role="tab" aria-selected="false" data-tab="layer">图层与光照</button>
+      </div>
+
+      <div class="pane" data-pane="route">
+        <ul class="rlist" id="rlist"></ul>
+        <p class="note skipped" id="skipped" hidden></p>
+        <div class="rhead"><h3 id="rName"></h3><span class="chip" id="rTag"></span><p id="rDesc"></p></div>
+        <div class="stats" id="rStats"></div>
+        <table class="segs" id="segs"></table>
+        <div class="player"><label for="weight">体重</label><input id="weight" type="number" min="30" max="150" value="65"><span>kg（用于估算热量）</span></div>
+        <p class="note">用时按 Tobler 徒步公式（越陡越慢）乘 0.85 休闲系数估算，不含休息<span id="cableNote">；索道按 2.5 m/s</span>。热量 ≈ 体重 ×（0.55 × 公里 + 0.0095 × 爬升米 + 0.0025 × 下降米）。均为参考值。</p>
+      </div>
+
+      <div class="pane" data-pane="poi" hidden>
+        <ul class="poilist" id="poilist"></ul>
+        <p class="note" id="poiNote"></p>
+      </div>
+
+      <div class="pane" data-pane="layer" hidden>
+        <div class="ctrl">
+          <label for="time">时刻</label><input id="time" type="range" min="6.3" max="18.2" step="0.05" value="15.5"><output id="timeO"></output>
+          <label for="haze">雾霾</label><input id="haze" type="range" min="0" max="1" step="0.01" value="0.35"><output id="hazeO"></output>
+          <label for="exag">垂直夸张</label><input id="exag" type="range" min="1" max="3" step="0.1" value="1.5"><output id="exagO"></output>
+        </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="tSat" checked>卫星影像</label>
+          <label><input type="checkbox" id="tShadow" checked>投影阴影</label>
+          <label><input type="checkbox" id="tContour">等高线</label>
+          <label><input type="checkbox" id="tTrail" checked>登山步道</label>
+          <label><input type="checkbox" id="tRoad">城市干道</label>
+          <label id="tCableRow"><input type="checkbox" id="tCable" checked><span id="tCableName">索道</span></label>
+          <label><input type="checkbox" id="tPoi" checked>地标</label>
+          <label><input type="checkbox" id="tPeak" checked>山峰</label>
+        </div>
+        <div class="btns">
+          <button id="spin" aria-pressed="false">自动环绕</button>
+          <button id="top">俯视</button>
+          <button id="low">低空</button>
+          <button id="reset">重置视角</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// 单地点三维视图：只在 #<id> 命中 sites.json 时由路由调用，数据全部来自 site/<id>/terrain.json
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+async function viewer(SITE) {
+  const $ = id => document.getElementById(id);
+  const stage = $('stage');
+  const setLoad = (p, t) => { $('loadBar').style.width = (p * 100) + '%'; if (t) $('loadTxt').textContent = t; };
+  if (!window.THREE) { setLoad(0, 'three.js 没有加载成功，请检查网络后刷新。'); return; }
+
+  // ---------- 载入数据 ----------
+  let T, satTex;
+  try {
+    const base = `site/${encodeURIComponent(SITE.id)}/`;
+    const tex = new Promise((res, rej) => new THREE.TextureLoader().load(base + 'satellite.jpg', res, undefined, rej));
+    const resp = await fetch(base + 'terrain.json'); if (!resp.ok) throw new Error(resp.status);
+    T = await resp.json(); setLoad(.4);
+    satTex = await tex; setLoad(.9, '正在生成地形…');
+  } catch (e) { setLoad(0, '数据加载失败，请刷新重试。'); return; }
+
+  const { NX, NY } = T, [LAT0, LAT1, LON0, LON1] = T.bbox;
+  const Wm = T.W * 1000, Hm = T.H * 1000;
+  const raw = Uint8Array.from(atob(T.h), c => c.charCodeAt(0));
+  const H16 = new Uint16Array(raw.buffer);
+  const HI = (i, j) => H16[j * (NX + 1) + i] / 10;
+  function sampleH(x, y) {   // x 东、y 北，单位 km
+    const fx = Math.max(0, Math.min(NX - 1e-6, x / T.W * NX)), fy = Math.max(0, Math.min(NY - 1e-6, y / T.H * NY));
+    const i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
+    return HI(i, j) * (1 - u) * (1 - v) + HI(i + 1, j) * u * (1 - v) + HI(i, j + 1) * (1 - u) * v + HI(i + 1, j + 1) * u * v;
+  }
+  const wx = x => x * 1000 - Wm / 2, wz = y => Hm / 2 - y * 1000;            // km → 世界坐标
+  const kx = X => (X + Wm / 2) / 1000, ky = Z => (Hm / 2 - Z) / 1000;        // 世界坐标 → km
+  const LATC = (LAT0 + LAT1) / 2;
+  const toLL = (x, y) => [LAT0 + y / 110.57, LON0 + x / (111.32 * Math.cos(LATC * Math.PI / 180))];
+  const SCALE = Math.max(Wm, Hm) / 9067;      // 相机、阴影范围按场地大小缩放（以白云山 9.1 km 为基准）
+  const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const PREFIX = new RegExp('^' + reEsc(T.name || '') + '(风景区)?');
+  // 去掉地点名前缀，但剩余部分须 ≥ 2 个字且不以标点/括号开头（避免 白水寨山 → 山、牛牯嶂（主） → （主））
+  const stripRaw = n => (T.name && n.replace(PREFIX, '')) || n;
+  const strip = n => { const r = stripRaw(n); return r !== n && [...r].length >= 2 && !/^[\p{P}\p{S}\s]/u.test(r) ? r : n; };
+  const CABLE_SEG = (T.routes || []).flatMap(r => r.segs).find(g => g.mode === 'cable');
+  const HAS_CABLE = Array.isArray(T.cable) && T.cable.length >= 2;
+  const CABLE_NAME = HAS_CABLE ? ((CABLE_SEG && CABLE_SEG.via && CABLE_SEG.via[0]) || '索道') : null;
+
+  document.title = `${T.name}地形模型 · 广州徒步地形`;
+  $('siteName').textContent = T.name; $('siteSub').textContent = T.sub || '';
+  $('tCableRow').hidden = !HAS_CABLE; if (HAS_CABLE) $('tCableName').textContent = CABLE_NAME;
+  $('cableNote').hidden = !CABLE_SEG;
+  const skipped = T.skipped || [];
+  if (skipped.length) { $('skipped').hidden = false; $('skipped').textContent = '以下路线无法用 OSM 真实路网生成（起终点离路网过远或路网不连通），未显示：' + skipped.map(k => `${k.name || k.route}（${strip(k.from)} → ${strip(k.to)}）`).join('、'); }
+
+  const st = { exag: +T.exag || 1.5, time: 15.5, haze: .35, spin: false, sel: null, hover: null };
+  $('exag').value = st.exag;
+
+  // ---------- 渲染器 / 场景 ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: false });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = .55;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.prepend(renderer.domElement);
+  renderer.domElement.tabIndex = 0;
+  renderer.domElement.setAttribute('aria-label', `${T.name}三维场景`);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(42, 1, 20, 400000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = .08;
+  controls.maxPolarAngle = 1.47; controls.minDistance = 300; controls.maxDistance = 32000 * Math.max(1, SCALE);
+  controls.screenSpacePanning = false; controls.autoRotateSpeed = .6;
+  controls.listenToKeyEvents && controls.listenToKeyEvents(renderer.domElement);
+
+  // 天空与太阳
+  const sky = new THREE.Sky(); sky.scale.setScalar(300000); scene.add(sky);
+  const su = sky.material.uniforms;
+  su.turbidity.value = 7; su.rayleigh.value = 1.6; su.mieCoefficient.value = .006; su.mieDirectionalG.value = .82;
+  const sunLight = new THREE.DirectionalLight(0xffffff, 1.6);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(4096, 4096);
+  const sc = sunLight.shadow.camera, SE = 6500 * SCALE; sc.left = -SE; sc.right = SE; sc.top = SE; sc.bottom = -SE; sc.near = 100; sc.far = 40000 * Math.max(1, SCALE);
+  sunLight.shadow.bias = -.0004; sunLight.shadow.normalBias = 6;
+  scene.add(sunLight, sunLight.target);
+  const hemi = new THREE.HemisphereLight(0xbfd6ee, 0x4a4a3a, .55); scene.add(hemi);
+  scene.fog = new THREE.FogExp2(0xb9c7d3, 0);
+
+  // ---------- 地形网格 ----------
+  const nV = (NX + 1) * (NY + 1);
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(nV * 3), uv = new Float32Array(nV * 2);
+  for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+    const k = j * (NX + 1) + i;
+    pos[3 * k] = i / NX * Wm - Wm / 2; pos[3 * k + 2] = Hm / 2 - j / NY * Hm;
+    uv[2 * k] = i / NX; uv[2 * k + 1] = j / NY;
+  }
+  const idx = new Uint32Array(NX * NY * 6); let n = 0;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const a = j * (NX + 1) + i, b = a + 1, c = a + NX + 1, d = c + 1;
+    idx[n++] = a; idx[n++] = b; idx[n++] = c; idx[n++] = b; idx[n++] = d; idx[n++] = c;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+
+  satTex.encoding = THREE.sRGBEncoding;
+  satTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const uniforms = { uExag: { value: st.exag }, uContour: { value: 0 } };
+  const terrainMat = new THREE.MeshStandardMaterial({ map: satTex, roughness: .93, metalness: 0, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 });
+  terrainMat.extensions = { derivatives: true };
+  terrainMat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vH;\nuniform float uExag;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvH = (modelMatrix * vec4(transformed, 1.0)).y / uExag;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vH;\nuniform float uContour;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        if (uContour > 0.5) {
+          float f = vH / 25.0; float w = fwidth(f);
+          float l = 1.0 - smoothstep(0.0, w * 1.3, abs(fract(f + 0.5) - 0.5));
+          float f2 = vH / 100.0; float w2 = fwidth(f2);
+          float l2 = 1.0 - smoothstep(0.0, w2 * 1.8, abs(fract(f2 + 0.5) - 0.5));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.93, 0.75), max(l * 0.45, l2 * 0.85));
+        }`);
+  };
+  const plainMat = new THREE.MeshStandardMaterial({ color: 0x8fa77e, roughness: .95, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 });
+  plainMat.extensions = terrainMat.extensions; plainMat.onBeforeCompile = terrainMat.onBeforeCompile;
+  const terrain = new THREE.Mesh(geo, terrainMat);
+  terrain.castShadow = terrain.receiveShadow = true;
+  scene.add(terrain);
+
+  // 沙盘侧壁与桌面
+  const skirtGeo = new THREE.BufferGeometry();
+  const ring = [];
+  for (let i = 0; i <= NX; i++) ring.push([i, 0]);
+  for (let j = 1; j <= NY; j++) ring.push([NX, j]);
+  for (let i = NX - 1; i >= 0; i--) ring.push([i, NY]);
+  for (let j = NY - 1; j >= 0; j--) ring.push([0, j]);
+  const sPos = new Float32Array(ring.length * 6), sCol = new Float32Array(ring.length * 6);
+  skirtGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
+  skirtGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
+  const sIdx = []; for (let k = 0; k < ring.length - 1; k++) { const a = 2 * k, b = a + 1, c = a + 2, d = a + 3; sIdx.push(a, c, b, b, c, d); }
+  skirtGeo.setIndex(sIdx);
+  const skirt = new THREE.Mesh(skirtGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide }));
+  skirt.castShadow = true; skirt.receiveShadow = true; scene.add(skirt);
+  const table = new THREE.Mesh(new THREE.PlaneGeometry(400000, 400000), new THREE.MeshStandardMaterial({ color: 0x6d7268, roughness: 1 }));
+  table.rotation.x = -Math.PI / 2; table.receiveShadow = true; scene.add(table);
+
+  // ---------- 线要素 ----------
+  const inBox = ([x, y]) => x >= 0 && y >= 0 && x <= T.W && y <= T.H;
+  const runs = pts => { const r = []; let c = []; for (const p of pts) { if (inBox(p)) c.push(p); else { if (c.length > 1) r.push(c); c = []; } } if (c.length > 1) r.push(c); return r; };
+  function densify(pts, step) {
+    const out = [];
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [x0, y0] = pts[k], [x1, y1] = pts[k + 1], m = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / step));
+      for (let t = 0; t < m; t++) out.push([x0 + (x1 - x0) * t / m, y0 + (y1 - y0) * t / m]);
+    }
+    out.push(pts[pts.length - 1]); return out;
+  }
+  function lineLayer(list, color, lift, opacity) {
+    const segs = [];
+    for (const p of list) for (const r of runs(p)) { const d = densify(r, .02); for (let k = 0; k < d.length - 1; k++) segs.push(d[k], d[k + 1]); }
+    const g = new THREE.BufferGeometry(), a = new Float32Array(segs.length * 3);
+    g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const obj = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+    obj.userData = { segs, lift }; scene.add(obj); return obj;
+  }
+  const trails = lineLayer(T.trails, 0xff8a5c, 4, .7);
+  const roads = lineLayer(T.roads.filter(r => r.k === 'm' || r.k === 't' || r.k === 'p').map(r => r.p), 0xffd166, 6, .9);
+  roads.visible = false;
+  function updateLine(obj) {
+    const a = obj.geometry.attributes.position.array, { segs, lift } = obj.userData;
+    segs.forEach(([x, y], k) => { a[3 * k] = wx(x); a[3 * k + 1] = sampleH(x, y) * st.exag + lift; a[3 * k + 2] = wz(y); });
+    obj.geometry.attributes.position.needsUpdate = true; obj.geometry.computeBoundingSphere();
+  }
+
+  // 索道（若有）：钢缆、塔架、往返的缆车厢；没有索道时 cable 组保持为空
+  const cable = new THREE.Group(); scene.add(cable);
+  const cA = HAS_CABLE ? T.cable[0] : null, cB = HAS_CABLE ? T.cable[T.cable.length - 1] : null;
+  const cableLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0x1b1b1b }));
+  cable.add(cableLine);
+  const towerMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, metalness: .6, roughness: .4 });
+  const towers = (HAS_CABLE ? [.18, .36, .54, .72, .88] : []).map(u => { const m = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 6), towerMat); m.castShadow = true; m.userData.u = u; cable.add(m); return m; });
+  // Claude Code 像素公仔：小号走路（两帧腿部动画），大号挂在索道上当缆车
+  function mascotCanvas(frame, big) {
+    const B = '#D97757', E = '#1d1410', O = 'rgba(24,14,8,.9)';
+    const legs = frame ? '...B.B..B.B...' : '..B.B....B.B..';
+    const rows = ['..BBBBBBBBBB..', '..BBBBBBBBBB..', '..BBEBBBBEBB..', '..BBEBBBBEBB..', 'BBBBBBBBBBBBBB', 'BBBBBBBBBBBBBB', '..BBBBBBBBBB..', '..BBBBBBBBBB..', legs, legs];
+    const P = big ? 8 : 6, hang = big ? 5 : 0, pad = 2;
+    const c = document.createElement('canvas'); c.width = 14 * P + pad * 2; c.height = (10 + hang) * P + pad * 2;
+    const g = c.getContext('2d');
+    if (hang) { g.fillStyle = O; g.fillRect(c.width / 2 - 2, 0, 4, hang * P + pad); g.fillRect(c.width / 2 - 3 * P, hang * P - P / 2, 6 * P, P / 2 + pad); }
+    g.fillStyle = O;
+    rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch !== '.') g.fillRect(x * P, (y + hang) * P, P + pad * 2, P + pad * 2); }));
+    rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '.') return; g.fillStyle = ch === 'E' ? E : B; g.fillRect(pad + x * P, pad + (y + hang) * P, P, P); }));
+    return c;
+  }
+  const mkTex = c => { const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; return t; };
+  const MASCOT = { sA: mkTex(mascotCanvas(0, false)), sB: mkTex(mascotCanvas(1, false)), bA: mkTex(mascotCanvas(0, true)), bB: mkTex(mascotCanvas(1, true)) };
+  const mascots = [];
+  function mascotSprite(big) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: big ? MASCOT.bA : MASCOT.sA, depthTest: false, depthWrite: false, transparent: true, sizeAttenuation: false }));
+    s.center.set(.5, big ? 1 : 0); s.renderOrder = 20;
+    const img = (big ? MASCOT.bA : MASCOT.sA).image;
+    s.userData.px = big ? 48 : 28; s.userData.aspect = img.width / img.height; mascots.push(s);
+    return s;
+  }
+  const cabins = (HAS_CABLE ? [0, .5] : []).map(o => { const s = mascotSprite(true); s.userData.o = o; cable.add(s); return s; });
+  let cEnd = [new THREE.Vector3(), new THREE.Vector3()];
+  function updateCable() {
+    if (!HAS_CABLE) return;
+    cEnd = [cA, cB].map(([x, y]) => new THREE.Vector3(wx(x), (sampleH(x, y) + 22) * st.exag, wz(y)));
+    cableLine.geometry.setFromPoints(cEnd);
+    for (const t of towers) {
+      const p = cEnd[0].clone().lerp(cEnd[1], t.userData.u), g = sampleH(kx(p.x), ky(p.z)) * st.exag;
+      t.scale.y = Math.max(1, p.y - g); t.position.set(p.x, (p.y + g) / 2, p.z);
+    }
+  }
+
+  // ---------- 地标精灵 ----------
+  const DESC = T.desc || {};
+  const KIND = { peak: '山峰', gate: '入口', spot: '景点' };
+  // 名称：索道站点改叫"索道上站"，其余去掉地点名前缀；与有介绍的地标重合（< 20 m）的无介绍地标去掉
+  const named = (T.pois || []).map(p => ({ ...p, nm: CABLE_NAME && p.n === CABLE_NAME ? '索道上站' : strip(p.n) }));
+  // 介绍查找：先用显示名，再用完整名，最后用（旧规则）去前缀名，兼容各配置的 desc 键
+  const descOf = q => DESC[q.nm] || DESC[q.n] || DESC[stripRaw(q.n)];
+  const kept = named.filter(q => descOf(q) || !named.some(o => o !== q && descOf(o) && Math.hypot(o.p[0] - q.p[0], o.p[1] - q.p[1]) < .02));
+  // 主峰：介绍里标为"主峰"的山峰，否则取最高的山峰
+  const peaks = kept.filter(p => p.k === 'peak');
+  const mainPeak = (SITE.peak && (peaks.find(p => p.n === SITE.peak) || peaks.find(p => p.nm === SITE.peak) ||
+      peaks.find(p => p.nm === strip(SITE.peak)) || peaks.find(p => stripRaw(p.n) === stripRaw(SITE.peak)))) ||
+    peaks.find(p => descOf(p) && descOf(p)[0] === '主峰') ||
+    peaks.slice().sort((a, b) => (+b.ele || sampleH(...b.p)) - (+a.ele || sampleH(...a.p)))[0];
+  const POIS = kept.map(p => {
+    const nm = p.nm;
+    const d = descOf(p) || [KIND[p.k], p.k === 'gate' ? `${T.name}的出入口之一。` : p.k === 'peak' ? `${T.name}一带的一座山峰。` : `${T.name}内的景点。`];
+    return { n: nm, x: p.p[0], y: p.p[1], h: sampleH(...p.p), k: p.k, ele: p.ele ? +p.ele : null, t: d[0] || KIND[p.k], d: d[1] || '',
+      pri: p === mainPeak ? 10 : descOf(p) ? 6 : p.k === 'peak' ? (p.ele ? 4 : 2) : 3 };
+  });
+  const POI_ORDER = [...POIS].sort((a, b) => b.pri - a.pri || (b.ele || b.h) - (a.ele || a.h));
+  st.sel = POI_ORDER.length ? POI_ORDER[0].n : null;
+  $('poiNote').textContent = T.note || '右侧数字是 OpenStreetMap 标注的海拔，没有标注的取 DEM 高程（≈）。DEM 精度约 30 m，山顶会被削平。';
+  const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#b5562b';
+  const DPR = 2, poleMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .75 });
+  function drawLabel(p) {
+    const on = p.n === st.sel, hov = p.n === st.hover;
+    const fs = (on ? 17 : 14) * DPR, sub = p.k === 'peak' ? String(p.ele || '≈' + Math.round(p.h)) : '';
+    const c = p.canvas || (p.canvas = document.createElement('canvas')), g = c.getContext('2d');
+    g.font = `${on ? 700 : 500} ${fs}px "Noto Sans SC", "PingFang SC", sans-serif`;
+    const tw = g.measureText(p.n).width;
+    g.font = `${11 * DPR}px "JetBrains Mono", monospace`; const sw = sub ? g.measureText(sub).width + 6 * DPR : 0;
+    const padL = 22 * DPR, w = Math.ceil(padL + tw + sw + 10 * DPR), h = Math.ceil(fs * 1.7);
+    c.width = w; c.height = h;
+    const cy = h / 2, r = (on ? 7 : hov ? 6 : 5) * DPR, cx = 10 * DPR;
+    if (on || hov) { g.fillStyle = on ? accent() : 'rgba(20,24,22,.7)'; roundRect(g, 0, 2 * DPR, w, h - 4 * DPR, h / 2); g.fill(); }
+    g.lineWidth = 2 * DPR; g.strokeStyle = 'rgba(0,0,0,.6)'; g.fillStyle = '#fff';
+    g.beginPath();
+    if (p.k === 'peak') { g.moveTo(cx, cy - r - 1); g.lineTo(cx + r + 1, cy + r * .8); g.lineTo(cx - r - 1, cy + r * .8); g.closePath(); }
+    else if (p.k === 'gate') g.rect(cx - r, cy - r, 2 * r, 2 * r);
+    else g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.stroke(); g.fill();
+    g.font = `${on ? 700 : 500} ${fs}px "Noto Sans SC", "PingFang SC", sans-serif`;
+    g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 4 * DPR; g.strokeStyle = on || hov ? 'transparent' : 'rgba(0,0,0,.65)';
+    g.strokeText(p.n, padL, cy + DPR); g.fillText(p.n, padL, cy + DPR);
+    if (sub) { g.font = `${11 * DPR}px "JetBrains Mono", monospace`; g.lineWidth = 3 * DPR; g.strokeText(sub, padL + tw + 6 * DPR, cy + DPR); g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText(sub, padL + tw + 6 * DPR, cy + DPR); }
+    if (!p.tex) p.tex = new THREE.CanvasTexture(c); else { p.tex.image = c; }
+    p.tex.encoding = THREE.sRGBEncoding; p.tex.needsUpdate = true; p.aspect = w / h; p.hpx = h / DPR;
+  }
+  function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  const labels = new THREE.Group(); scene.add(labels);
+  for (const p of POIS) {
+    drawLabel(p);
+    p.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: p.tex, depthTest: false, depthWrite: false, transparent: true, sizeAttenuation: false }));
+    p.sprite.center.set(10 / (p.aspect * p.hpx) , .5); p.sprite.renderOrder = 10; p.sprite.userData.poi = p;
+    p.pole = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), poleMat);
+    labels.add(p.sprite, p.pole);
+  }
+  const POLE = 90;
+  function updateLabels() {
+    for (const p of POIS) {
+      const g = new THREE.Vector3(wx(p.x), p.h * st.exag, wz(p.y)), t = g.clone(); t.y += POLE;
+      p.ground = g; p.sprite.position.copy(t); p.pole.geometry.setFromPoints([g, t]);
+    }
+  }
+  function refreshLabel(p) { drawLabel(p); p.sprite.material.map = p.tex; p.sprite.center.set(10 / (p.aspect * p.hpx), .5); p.sprite.material.needsUpdate = true; }
+
+  // ---------- 高度夸张：重算一切和高度相关的东西 ----------
+  function applyExag() {
+    const a = geo.attributes.position.array;
+    for (let k = 0; k < nV; k++) a[3 * k + 1] = H16[k] / 10 * st.exag;
+    geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); geo.computeBoundingSphere();
+    uniforms.uExag.value = st.exag;
+    const base = -60 * st.exag - 30;
+    ring.forEach(([i, j], k) => {
+      const X = i / NX * Wm - Wm / 2, Z = Hm / 2 - j / NY * Hm, top = HI(i, j) * st.exag;
+      sPos.set([X, top, Z, X, base, Z], 6 * k);
+      sCol.set([.42, .33, .23, .22, .17, .12], 6 * k);
+    });
+    skirtGeo.attributes.position.needsUpdate = true; skirtGeo.attributes.color.needsUpdate = true; skirtGeo.computeVertexNormals();
+    table.position.y = base - 1;
+    updateLine(trails); updateLine(roads); updateCable(); updateLabels();
+    if (typeof buildRibbon === 'function' && R.cur) buildRibbon();
+  }
+
+  // ---------- 太阳：按十月的广州近似计算方位与高度 ----------
+  const sunDir = new THREE.Vector3();
+  function applySun() {
+    const t = (st.time - 6.3) / (18.2 - 6.3);                 // 0 日出 → 1 日落
+    const el = Math.max(.5, 56 * Math.sin(Math.PI * t));       // 正午约 56°
+    const az = 102 + 156 * t;                                  // 东偏南 → 西偏南
+    const phi = THREE.MathUtils.degToRad(90 - el), theta = THREE.MathUtils.degToRad(az);
+    sunDir.set(Math.sin(phi) * Math.sin(theta), Math.cos(phi), -Math.sin(phi) * Math.cos(theta));
+    su.sunPosition.value.copy(sunDir);
+    sunLight.position.copy(sunDir).multiplyScalar(20000); sunLight.target.position.set(0, 0, 0);
+    const warm = Math.max(0, 1 - el / 22);                     // 低太阳 → 暖光
+    sunLight.color.setRGB(1, 1 - .25 * warm, 1 - .5 * warm);
+    sunLight.intensity = .5 + 1.3 * Math.min(1, el / 25);
+    hemi.intensity = .35 + .3 * Math.min(1, el / 30);
+    const fog = new THREE.Color().setRGB(.72 + .15 * warm, .78 + .02 * warm, .84 - .14 * warm);
+    scene.fog.color.copy(fog); table.material.color.copy(fog).multiplyScalar(.55);
+    renderer.toneMappingExposure = .42 + .18 * Math.min(1, el / 30);
+    const hh = Math.floor(st.time), mm = Math.round((st.time - hh) * 60);
+    $('timeO').textContent = `${hh}:${String(mm % 60).padStart(2, '0')}`;
+  }
+  function applyHaze() {
+    scene.fog.density = (.000012 + st.haze * .00009) / SCALE;   // 大场地按尺度减淡，观感一致
+    su.turbidity.value = 4 + st.haze * 10;
+    $('hazeO').textContent = Math.round(st.haze * 100) + '%';
+  }
+
+  // ---------- 相机 ----------
+  const HOME = { pos: new THREE.Vector3(-3800 * SCALE, 4200 * SCALE, 7600 * SCALE), tgt: new THREE.Vector3(200 * SCALE, 150, -200 * SCALE) };
+  camera.position.copy(HOME.pos); controls.target.copy(HOME.tgt);
+  let fly = null;
+  function flyTo(tgt, pos, ms = 1300) {
+    fly = { t0: performance.now(), ms, p0: camera.position.clone(), t0v: controls.target.clone(), p1: pos, t1: tgt };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) fly.ms = 1;
+  }
+  function stepFly(now) {
+    const u = Math.min(1, (now - fly.t0) / fly.ms), e = u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    camera.position.lerpVectors(fly.p0, fly.p1, e); controls.target.lerpVectors(fly.t0v, fly.t1, e);
+    if (u >= 1) fly = null;
+  }
+  function select(name, go) {
+    $('poicard').hidden = false;
+    const prev = POIS.find(q => q.n === st.sel); st.sel = name;
+    if (prev) refreshLabel(prev);
+    const p = POIS.find(q => q.n === name); refreshLabel(p); showInfo();
+    if (go) {
+      const tgt = p.ground.clone();
+      const dir = camera.position.clone().sub(controls.target); dir.y = 0; dir.normalize();
+      const dist = 2200 * SCALE;
+      flyTo(tgt, tgt.clone().add(dir.multiplyScalar(dist * .8)).add(new THREE.Vector3(0, dist * .62, 0)));
+    }
+  }
+
+  // ---------- 侧栏 ----------
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]'); if (!b) return;
+    document.querySelectorAll('.tabs [data-tab]').forEach(x => x.setAttribute('aria-selected', x === b));
+    document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  });
+  $('infoClose').addEventListener('click', () => { $('poicard').hidden = true; });
+  $('fold').addEventListener('click', e => {
+    const min = $('dock').classList.toggle('min');
+    e.currentTarget.textContent = min ? '剖面 ▸' : '剖面 ▾'; e.currentTarget.setAttribute('aria-pressed', min);
+  });
+  function showInfo() {
+    const p = POIS.find(q => q.n === st.sel); if (!p) { $('poicard').hidden = true; return; }
+    const [lat, lon] = toLL(p.x, p.y);
+    $('info').innerHTML = `<div class="label">当前地标</div><h2>${esc(p.n)}</h2>
+      <div class="meta"><span class="chip">${esc(p.t)}</span>${p.ele ? `<span class="chip plain">标注 ${p.ele} m</span>` : ''}
+      <span class="chip plain">DEM ≈${Math.round(p.h)} m</span><span class="chip plain">${lat.toFixed(4)}°N ${lon.toFixed(4)}°E</span></div><p>${esc(p.d)}</p>`;
+    document.querySelectorAll('.poilist button').forEach(b => b.classList.toggle('on', b.dataset.n === p.n));
+  }
+  $('poilist').innerHTML = POI_ORDER
+    .map(p => `<li><button data-n="${esc(p.n)}"><span>${esc(p.n)}</span><span>${p.ele || '≈' + Math.round(p.h)}</span></button></li>`).join('');
+  $('poilist').addEventListener('click', e => { const b = e.target.closest('button'); if (b) select(b.dataset.n, true); });
+
+  const out = (id, v) => $(id + 'O').textContent = v;
+  $('time').addEventListener('input', e => { st.time = +e.target.value; applySun(); });
+  $('haze').addEventListener('input', e => { st.haze = +e.target.value; applyHaze(); });
+  $('exag').addEventListener('input', e => { st.exag = +e.target.value; out('exag', st.exag.toFixed(1) + '×'); applyExag(); });
+  $('tSat').addEventListener('change', e => { terrain.material = e.target.checked ? terrainMat : plainMat; });
+  $('tShadow').addEventListener('change', e => { sunLight.castShadow = e.target.checked; });
+  $('tContour').addEventListener('change', e => { uniforms.uContour.value = e.target.checked ? 1 : 0; });
+  $('tTrail').addEventListener('change', e => { trails.visible = e.target.checked; });
+  $('tRoad').addEventListener('change', e => { roads.visible = e.target.checked; });
+  $('tCable').addEventListener('change', e => { cable.visible = e.target.checked; });
+  const layerOn = p => p.n === st.sel || (p.k === 'peak' ? $('tPeak').checked : $('tPoi').checked);
+  $('spin').addEventListener('click', e => { st.spin = !st.spin; controls.autoRotate = st.spin; e.currentTarget.setAttribute('aria-pressed', st.spin); });
+  $('top').addEventListener('click', () => { const t = controls.target.clone(); flyTo(t, t.clone().add(new THREE.Vector3(0, 11000 * SCALE, 600 * SCALE))); });
+  $('low').addEventListener('click', () => {
+    const t = controls.target.clone(), d = camera.position.clone().sub(t); d.y = 0; d.setLength(2600);
+    const p = t.clone().add(d); p.y = Math.max(t.y + 260, sampleH(kx(p.x), ky(p.z)) * st.exag + 220); flyTo(t, p);
+  });
+  $('reset').addEventListener('click', () => flyTo(HOME.tgt.clone(), HOME.pos.clone()));
+  const north = () => { const t = controls.target, d = camera.position.clone().sub(t), r = Math.hypot(d.x, d.z); flyTo(t.clone(), new THREE.Vector3(t.x, camera.position.y, t.z + r), 700); };
+  $('compass').addEventListener('click', north);
+  $('compass').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); north(); } });
+
+  // ---------- 拾取：点击地标 / 悬停读高程 ----------
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let down = null, hoverEvt = null;
+  const toNdc = e => { const r = renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); return r; };
+  function pickPoi(e) {
+    toNdc(e); ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(POIS.filter(p => p.sprite.visible).map(p => p.sprite));
+    return hits.length ? hits[0].object.userData.poi : null;
+  }
+  function pickGround(e) {
+    toNdc(e); ray.setFromCamera(ndc, camera);
+    const o = ray.ray.origin.clone(), d = ray.ray.direction;
+    let step = 40, prev = o.clone();
+    for (let s = 0; s < 1500; s++) {
+      const p = o.clone().addScaledVector(d, s * step);
+      const x = kx(p.x), y = ky(p.z);
+      if (x >= 0 && y >= 0 && x <= T.W && y <= T.H && p.y <= sampleH(x, y) * st.exag) {
+        let a = prev, b = p;
+        for (let r = 0; r < 12; r++) { const m = a.clone().lerp(b, .5); if (m.y <= sampleH(kx(m.x), ky(m.z)) * st.exag) b = m; else a = m; }
+        return [kx(b.x), ky(b.z)];
+      }
+      if (p.y < -500) break;
+      prev = p;
+    }
+    return null;
+  }
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; fly = null; });
+  cv.addEventListener('pointerup', e => {
+    if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) { const p = pickPoi(e); if (p) select(p.n, true); }
+    down = null;
+  });
+  cv.addEventListener('pointermove', e => { hoverEvt = e; });
+  cv.addEventListener('pointerleave', () => { hoverEvt = null; $('tip').hidden = true; setHover(null); });
+  function setHover(n) { if (n === st.hover) return; const old = POIS.find(q => q.n === st.hover); st.hover = n; if (old) refreshLabel(old); const p = POIS.find(q => q.n === n); if (p) refreshLabel(p); cv.style.cursor = n ? 'pointer' : ''; }
+  function doHover() {
+    const e = hoverEvt; hoverEvt = null; const tip = $('tip');
+    if (down) { tip.hidden = true; return; }
+    const r = stage.getBoundingClientRect(), p = pickPoi(e);
+    setHover(p ? p.n : null);
+    let text = null;
+    if (p) text = `${p.n} · ${p.ele ? p.ele + ' m' : '≈' + Math.round(p.h) + ' m'} · 点击飞过去`;
+    else { const g = pickGround(e); if (g) { const [lat, lon] = toLL(...g); text = `高程 ${Math.round(sampleH(...g))} m · ${lat.toFixed(4)}°N ${lon.toFixed(4)}°E`; } }
+    if (text) { tip.hidden = false; tip.textContent = text; tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top) + 'px'; } else tip.hidden = true;
+  }
+
+  // ---------- 标签缩放与避让 ----------
+  const v3 = new THREE.Vector3();
+  function layoutLabels(hpx) {
+    const k = 2 / (camera.projectionMatrix.elements[5] * hpx);   // 像素 → sizeAttenuation=false 的精灵尺度
+    const boxes = [], w = renderer.domElement.clientWidth;
+    const order = [...POIS].sort((a, b) => (b.n === st.sel) - (a.n === st.sel) || (b.n === st.hover) - (a.n === st.hover) || b.pri - a.pri);
+    for (const p of order) {
+      p.sprite.scale.set(p.hpx * p.aspect * k, p.hpx * k, 1);
+      let show = layerOn(p);
+      if (show) {
+        v3.copy(p.sprite.position).project(camera);
+        if (v3.z > 1) show = false;
+        else {
+          const x = (v3.x + 1) / 2 * w, y = (1 - v3.y) / 2 * hpx, bw = p.hpx * p.aspect, b = [x - 10, y - p.hpx / 2, x + bw - 10, y + p.hpx / 2];
+          if (p.n !== st.sel && boxes.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) show = false;
+          else boxes.push(b);
+        }
+      }
+      p.sprite.visible = p.pole.visible = show;
+    }
+  }
+
+  // ---------- 路线演示 ----------
+  const fmtT = s => { const m = Math.round(s / 60); return m < 60 ? `${m} 分` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`; };
+  const fmtC = s => { const m = Math.floor(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+  const DISP = strip;
+  function analyse(r) {
+    const samples = []; let t = 0, dist = 0;
+    const segs = r.segs.map((s, si) => {
+      const pts = densify(s.p, .01);
+      let hs = pts.map(([x, y]) => sampleH(x, y));
+      hs = hs.map((_, i) => { let a = 0, n = 0; for (let k = -3; k <= 3; k++) { const v = hs[i + k]; if (v !== undefined) { a += v; n++; } } return a / n; });
+      const g = { from: DISP(s.from), to: DISP(s.to), mode: s.mode, via: s.via, dist: 0, up: 0, down: 0, time: 0, t0: t, d0: dist, maxH: 0 };
+      pts.forEach(([x, y], i) => {
+        if (i > 0) {
+          const dd = Math.hypot(x - pts[i - 1][0], y - pts[i - 1][1]), dh = hs[i] - hs[i - 1];
+          if (s.mode === 'cable') g.time += Math.hypot(dd * 1000, dh) / 2.5;
+          else { const v = 6 * Math.exp(-3.5 * Math.abs((dd > 0 ? dh / (dd * 1000) : 0) + .05)) * .85; g.time += dd / v * 3600; }
+          g.dist += dd; if (dh > 0) g.up += dh; else g.down -= dh;
+        } else if (si > 0) return;
+        g.maxH = Math.max(g.maxH, hs[i]);
+        samples.push({ x, y, h: hs[i], t: g.t0 + g.time, d: g.d0 + g.dist, seg: si });
+      });
+      t += g.time; dist += g.dist;
+      return g;
+    });
+    return { ...r, samples, segStats: segs, total: t, dist, up: segs.reduce((a, s) => a + (s.mode === 'walk' ? s.up : 0), 0),
+      down: segs.reduce((a, s) => a + (s.mode === 'walk' ? s.down : 0), 0), maxH: Math.max(...segs.map(s => s.maxH)),
+      walkDist: segs.reduce((a, s) => a + (s.mode === 'walk' ? s.dist : 0), 0) };
+  }
+  const kcal = (s, W) => s.mode === 'walk' ? W * (.55 * s.dist + .0095 * s.up + .0025 * s.down) : W * 1.3 * s.time / 3600;
+  const ROUTES = (T.routes || []).map(analyse);
+
+  const R = { cur: null, simT: 0, playing: false, speed: 300, phase: 0, uiT: 0 };
+  const routeLayer = new THREE.Group(); scene.add(routeLayer);
+  const hiker = mascotSprite(false), rider = mascotSprite(true);
+  hiker.visible = rider.visible = false; routeLayer.add(hiker, rider);
+  const ribbonMat = new THREE.ShaderMaterial({
+    uniforms: { uProg: { value: 0 }, uWidth: { value: 12 }, uDone: { value: new THREE.Color(0xff6a2b) }, uTodo: { value: new THREE.Color(0xfff6e8) } },
+    vertexShader: `attribute float aSide; attribute vec3 aDir; attribute float aT; uniform float uWidth; varying float vT; varying float vS;
+      void main() { vT = aT; vS = aSide; vec3 p = position + aDir * aSide * uWidth; p.y += uWidth * .7 + 2.0; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+    fragmentShader: `uniform float uProg; uniform vec3 uDone; uniform vec3 uTodo; varying float vT; varying float vS;
+      void main() { float done = step(vT, uProg); float edge = 1.0 - smoothstep(.5, 1.0, abs(vS));
+        vec3 c = mix(uTodo, uDone, done); float a = mix(.6, 1.0, done) * (.3 + .7 * edge); gl_FragColor = vec4(c, a); }`,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  let ribbon = null;
+  function buildRibbon() {
+    if (ribbon) { routeLayer.remove(ribbon); ribbon.geometry.dispose(); }
+    const S = R.cur.samples, segs = R.cur.segStats, pos = [], dir = [], side = [], at = [], idx = [];
+    let strip = [];
+    const flush = () => {
+      if (strip.length < 2) { strip = []; return; }
+      const base = pos.length / 3;
+      strip.forEach((s, k) => {
+        const a = strip[Math.max(0, k - 1)], b = strip[Math.min(strip.length - 1, k + 1)];
+        let dx = b.x - a.x, dy = b.y - a.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+        const X = wx(s.x), Y = s.h * st.exag, Z = wz(s.y);
+        for (const sd of [-1, 1]) { pos.push(X, Y, Z); dir.push(-dy, 0, -dx); side.push(sd); at.push(s.t / R.cur.total); }
+        if (k > 0) { const q = base + 2 * k; idx.push(q - 2, q - 1, q, q - 1, q + 1, q); }
+      });
+      strip = [];
+    };
+    S.forEach(s => { if (segs[s.seg].mode === 'walk') strip.push(s); else { flush(); } });
+    flush();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('aDir', new THREE.Float32BufferAttribute(dir, 3));
+    g.setAttribute('aSide', new THREE.Float32BufferAttribute(side, 1));
+    g.setAttribute('aT', new THREE.Float32BufferAttribute(at, 1));
+    g.setIndex(idx);
+    ribbon = new THREE.Mesh(g, ribbonMat); ribbon.renderOrder = 5; ribbon.frustumCulled = false; routeLayer.add(ribbon);
+  }
+  function posAt(t) {
+    const S = R.cur.samples; let lo = 0, hi = S.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].t <= t) lo = m; else hi = m; }
+    const a = S[lo], b = S[hi], u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
+    const seg = t >= b.t ? b.seg : a.seg;
+    return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, h: a.h + (b.h - a.h) * u, d: a.d + (b.d - a.d) * u, seg: hi === lo ? a.seg : (u >= 1 ? b.seg : (a.seg === b.seg ? a.seg : b.seg)) };
+  }
+
+  const W_ = () => Math.max(30, Math.min(150, +$('weight').value || 65));
+  function renderRouteList() {
+    $('rlist').innerHTML = ROUTES.map(r => `<li><button data-id="${esc(r.id)}" class="${R.cur && R.cur.id === r.id ? 'on' : ''}">
+      <b>${esc(r.name)}</b><em>${esc(r.tag)}</em><small>${r.dist.toFixed(1)} km · ${fmtT(r.total)} · ↑${Math.round(r.up)} m${r.segStats.some(s => s.mode === 'cable') ? ' · 含索道' : ''}</small></button></li>`).join('');
+  }
+  function renderRoutePanel() {
+    const r = R.cur, W = W_(), segK = r.segStats.map(s => kcal(s, W)), totK = segK.reduce((a, b) => a + b, 0);
+    $('rName').textContent = r.name; $('rTag').textContent = r.tag; $('rDesc').textContent = r.desc;
+    const hasCable = r.segStats.some(s => s.mode === 'cable');
+    $('rStats').innerHTML = [
+      ['总距离', r.dist.toFixed(2), 'km', hasCable ? `步行 ${r.walkDist.toFixed(2)} km` : ''],
+      ['参考用时', fmtC(r.total), '', ''], ['累计爬升', Math.round(r.up), 'm', hasCable ? '不含索道' : ''],
+      ['累计下降', Math.round(r.down), 'm', ''], ['消耗', Math.round(totK), '大卡', '', true], ['最高点', Math.round(r.maxH), 'm', '']
+    ].map(([k, v, u, n, hot]) => `<div class="stat${hot ? ' hot' : ''}"><span>${k}</span><b>${v}<small>${u}</small></b>${n ? `<em>${n}</em>` : ''}</div>`).join('');
+    $('segs').innerHTML = `<thead><tr><th>路段</th><th>距离</th><th>爬升</th><th>用时</th><th>大卡</th></tr></thead><tbody>` +
+      r.segStats.map((s, i) => `<tr data-i="${i}"><td>${i + 1}. ${esc(s.from)} → ${esc(s.to)}<small><span class="mode ${s.mode}">${s.mode === 'cable' ? '乘索道' : '步行'}</span> 下降 ${Math.round(s.down)} m${s.via && s.via.length ? ' · 经 ' + s.via.map(esc).join('、') : ''}</small></td>
+        <td>${s.dist.toFixed(2)}</td><td>${Math.round(s.up)}</td><td>${fmtT(s.time)}</td><td>${Math.round(segK[i])}</td></tr>`).join('') +
+      `</tbody><tfoot><tr><td>合计 · km / m / 大卡</td><td>${r.dist.toFixed(2)}</td><td>${Math.round(r.segStats.reduce((a, s) => a + s.up, 0))}</td><td>${fmtT(r.total)}</td><td>${Math.round(totK)}</td></tr></tfoot>`;
+    renderProfile();
+  }
+  function renderProfile() {
+    const r = R.cur, svgP = $('profile'), w = Math.max(300, svgP.clientWidth || 800), h = 108, padL = 34, padR = 8, padT = 16, padB = 14;
+    svgP.setAttribute('viewBox', `0 0 ${w} ${h}`); svgP.setAttribute('preserveAspectRatio', 'none');
+    const hs = r.samples.map(s => s.h), hMin = Math.max(0, Math.floor(Math.min(...hs) / 50) * 50), hMax = Math.ceil(Math.max(...hs) / 50) * 50 + 20;
+    const X = d => padL + d / r.dist * (w - padL - padR), Y = v => padT + (1 - (v - hMin) / (hMax - hMin)) * (h - padT - padB);
+    R.prof = { X, Y, padL, padR, w };
+    let s = '';
+    const step = [20, 50, 100, 200, 250, 500].find(st => (hMax - hMin) / st <= 4) ?? 500;
+    for (let v = Math.ceil(hMin / step) * step; v <= hMax; v += step) s += `<line x1="${padL}" x2="${w - padR}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${padL - 4}" y="${Y(v) + 3}" text-anchor="end" font-size="10" font-family="var(--f-mono)" fill="var(--muted)">${v}</text>`;
+    r.segStats.forEach((g, i) => {
+      if (g.mode === 'cable') s += `<rect x="${X(g.d0)}" y="${padT}" width="${X(g.d0 + g.dist) - X(g.d0)}" height="${h - padT - padB}" fill="var(--accent-soft)"/><text x="${(X(g.d0) + X(g.d0 + g.dist)) / 2}" y="${padT + 12}" text-anchor="middle" font-size="10" fill="var(--accent)">索道</text>`;
+    });
+    const pts = r.samples.map(p => `${X(p.d).toFixed(1)},${Y(p.h).toFixed(1)}`).join(' ');
+    s += `<polygon points="${X(0)},${h - padB} ${pts} ${X(r.dist)},${h - padB}" fill="var(--accent)" opacity=".14"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.6"/>`;
+    const names = [r.segStats[0].from, ...r.segStats.map(g => g.to)];
+    names.forEach((n, i) => {
+      const d = i === 0 ? 0 : r.segStats[i - 1].d0 + r.segStats[i - 1].dist, x = X(d), anchor = i === 0 ? 'start' : i === names.length - 1 ? 'end' : 'middle';
+      s += `<line x1="${x}" x2="${x}" y1="${padT - 4}" y2="${h - padB}" stroke="var(--muted)" stroke-dasharray="2 3" opacity=".6"/><text x="${x}" y="${padT - 7}" text-anchor="${anchor}" font-size="10.5" fill="var(--ink)">${esc(n)}</text>`;
+    });
+    s += `<text x="${w - padR}" y="${h - 4}" text-anchor="end" font-size="10" font-family="var(--f-mono)" fill="var(--muted)">${r.dist.toFixed(1)} km</text><text x="${padL}" y="${h - 4}" font-size="10" font-family="var(--f-mono)" fill="var(--muted)">0</text>`;
+    s += `<g id="pMark"><line y1="${padT}" y2="${h - padB}" stroke="var(--ink)" stroke-width="1"/><circle r="4" fill="var(--accent)" stroke="var(--panel)" stroke-width="1.5"/></g>`;
+    svgP.innerHTML = s;
+  }
+  function selectRoute(id, go = true) {
+    R.cur = ROUTES.find(r => r.id === id); R.simT = 0; setPlaying(false);
+    buildRibbon(); renderRouteList(); renderRoutePanel(); updateRouteUI(true);
+    if (go) {
+      const S = R.cur.samples, xs = S.map(s => s.x), ys = S.map(s => s.y);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const ext = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * 1000;
+      const mh = S.reduce((a, q) => a + q.h, 0) / S.length;
+      const tgt = new THREE.Vector3(wx(cx), mh * st.exag, wz(cy));
+      const dir = camera.position.clone().sub(controls.target); dir.y = 0; dir.normalize();
+      const dist = Math.max(2200 * SCALE, ext * 1.25);
+      flyTo(tgt, tgt.clone().add(dir.multiplyScalar(dist * .75)).add(new THREE.Vector3(0, dist * .7, 0)));
+    }
+  }
+  function setPlaying(v) {
+    R.playing = v; const b = $('play'); b.setAttribute('aria-pressed', v); b.textContent = v ? '❚❚ 暂停' : '▶ 播放';
+    $('status').hidden = !R.cur;
+  }
+  function updateRouteUI(force) {
+    const r = R.cur; if (!r) return;
+    const p = posAt(R.simT), g = r.segStats[p.seg];
+    if (document.activeElement !== $('prog') || force) $('prog').value = Math.round(R.simT / r.total * 1000);
+    const doneK = r.segStats.reduce((a, s, i) => a + (i < p.seg ? kcal(s, W_()) : i === p.seg ? kcal(s, W_()) * Math.max(0, Math.min(1, (R.simT - s.t0) / s.time)) : 0), 0);
+    $('status').hidden = false;
+    $('status').textContent = `${R.playing ? '▶' : '❚❚'} 第 ${p.seg + 1} 段 ${g.from} → ${g.to} · ${g.mode === 'cable' ? '乘索道' : '步行'} · ${p.d.toFixed(2)} / ${r.dist.toFixed(2)} km · 用时 ${fmtC(R.simT)} · 海拔 ${Math.round(p.h)} m · ${Math.round(doneK)} 大卡`;
+    const m = document.getElementById('pMark');
+    if (m && R.prof) { const x = R.prof.X(p.d), y = R.prof.Y(p.h); m.querySelector('line').setAttribute('x1', x); m.querySelector('line').setAttribute('x2', x); m.querySelector('circle').setAttribute('cx', x); m.querySelector('circle').setAttribute('cy', y); }
+    document.querySelectorAll('#segs tbody tr').forEach(tr => tr.classList.toggle('cur', +tr.dataset.i === p.seg));
+  }
+  const routeV = new THREE.Vector3();
+  function stepRoute(dt) {
+    if (!R.cur) return;
+    const r = R.cur;
+    if (R.playing) { R.simT += dt * R.speed; if (R.simT >= r.total) { R.simT = r.total; setPlaying(false); } }
+    const p = posAt(R.simT), g = r.segStats[p.seg];
+    ribbonMat.uniforms.uProg.value = R.simT / r.total;
+    ribbonMat.uniforms.uWidth.value = Math.max(6, Math.min(70, camera.position.distanceTo(controls.target) * .003));
+    if (g.mode === 'cable') {
+      const f = Math.max(0, Math.min(1, (R.simT - g.t0) / g.time));
+      routeV.copy(cEnd[0]).lerp(cEnd[1], f); rider.position.copy(routeV);
+      rider.visible = true; hiker.visible = false;
+      rider.material.map = (R.playing && Math.floor(performance.now() / 400) % 2) ? MASCOT.bB : MASCOT.bA;
+    } else {
+      routeV.set(wx(p.x), p.h * st.exag + 3, wz(p.y)); hiker.position.copy(routeV);
+      hiker.visible = true; rider.visible = false;
+      if (R.playing) R.phase += dt;
+      hiker.material.map = Math.floor(R.phase / .14) % 2 ? MASCOT.sB : MASCOT.sA;
+    }
+    for (const c of cabins) c.visible = !rider.visible;
+    if (R.playing && $('follow').checked && !down && !fly) {
+      const d = routeV.clone().sub(controls.target).multiplyScalar(Math.min(1, dt * 2.2));
+      controls.target.add(d); camera.position.add(d);
+    }
+    R.uiT += dt; if (R.uiT > .1) { R.uiT = 0; updateRouteUI(); }
+  }
+  $('rlist').addEventListener('click', e => { const b = e.target.closest('button'); if (b) selectRoute(b.dataset.id); });
+  $('play').addEventListener('click', () => {
+    if (!R.cur) return;
+    if (!R.playing && R.simT >= R.cur.total) R.simT = 0;
+    setPlaying(!R.playing);
+    if (R.playing && $('follow').checked) {   // 先把镜头拉近到公仔附近
+      const p = posAt(R.simT), t = new THREE.Vector3(wx(p.x), p.h * st.exag, wz(p.y));
+      const dir = camera.position.clone().sub(controls.target); dir.y = 0; dir.normalize();
+      if (camera.position.distanceTo(controls.target) > 3500) flyTo(t, t.clone().add(dir.multiplyScalar(1700)).add(new THREE.Vector3(0, 1300, 0)), 900);
+    }
+  });
+  $('restart').addEventListener('click', () => { if (R.cur) { R.simT = 0; R.phase = 0; updateRouteUI(true); } });
+  $('prog').addEventListener('input', e => { if (R.cur) { R.simT = +e.target.value / 1000 * R.cur.total; updateRouteUI(); } });
+  $('speed').addEventListener('change', e => { R.speed = +e.target.value; });
+  $('weight').addEventListener('input', () => { renderRoutePanel(); updateRouteUI(true); });
+  $('segs').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr && R.cur) { R.simT = R.cur.segStats[+tr.dataset.i].t0 + .01; updateRouteUI(true); } });
+  $('profile').addEventListener('click', e => {
+    if (!R.cur || !R.prof) return;
+    const b = $('profile').getBoundingClientRect(), x = (e.clientX - b.left) / b.width * R.prof.w;
+    const d = Math.max(0, Math.min(R.cur.dist, (x - R.prof.padL) / (R.prof.w - R.prof.padL - R.prof.padR) * R.cur.dist));
+    const S = R.cur.samples; let k = 0; while (k < S.length - 1 && S[k + 1].d < d) k++;
+    R.simT = S[k].t; updateRouteUI(true);
+  });
+  new ResizeObserver(() => { if (R.cur) { renderProfile(); updateRouteUI(true); } }).observe($('profile'));
+
+  // ---------- 主循环 ----------
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+  const camDir = new THREE.Vector3();
+  let lastNow = performance.now();
+  function loop(now) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(.1, (now - lastNow) / 1000); lastNow = now;
+    if (fly) stepFly(now);
+    stepRoute(dt);
+    controls.update();
+    if (cable.visible) for (const c of cabins) {
+      const u = ((now / 26000 + c.userData.o) % 1), uu = u < .5 ? u * 2 : 2 - u * 2;   // 往返
+      c.position.copy(cEnd[0]).lerp(cEnd[1], uu);
+      c.material.map = Math.floor(now / 500 + c.userData.o * 2) % 2 ? MASCOT.bB : MASCOT.bA;
+    }
+    const pxK = 2 / (camera.projectionMatrix.elements[5] * renderer.domElement.clientHeight);
+    for (const m of mascots) m.scale.set(m.userData.px * m.userData.aspect * pxK, m.userData.px * pxK, 1);
+    if (hoverEvt) doHover();
+    layoutLabels(renderer.domElement.clientHeight);
+    camera.getWorldDirection(camDir);
+    $('needle').setAttribute('transform', `rotate(${THREE.MathUtils.radToDeg(Math.atan2(camDir.x, -camDir.z)) * -1})`);
+    const dist = camera.position.distanceTo(controls.target);
+    $('hud').innerHTML = `<span>视距 ${(dist / 1000).toFixed(1)} km · 相机海拔 ${Math.round(camera.position.y / st.exag)} m</span><span>网格 ${NX}×${NY} · ${Math.round(Wm / NX)} m · ${(renderer.info.render.triangles / 1000).toFixed(0)}k 三角面</span>`;
+    renderer.render(scene, camera);
+  }
+
+  applyExag(); applySun(); applyHaze(); out('exag', st.exag.toFixed(1) + '×');
+  showInfo();
+  renderRouteList();
+  if (ROUTES.length) selectRoute(ROUTES.some(r => r.id === T.defaultRoute) ? T.defaultRoute : ROUTES[0].id, false);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => POIS.forEach(refreshLabel));
+  setLoad(1); $('loading').hidden = true;
+  requestAnimationFrame(loop);
+}
+
+// ---------- 路由：无 hash / 未知 hash → 地点列表；#<id> → 该地点的三维视图 ----------
+(() => {
+  const $ = id => document.getElementById(id);
+  const nav = id => {
+    try { location.hash = id; location.reload(); }
+    catch (e) { location.href = location.pathname + (id ? '#' + id : ''); location.reload(); }
+  };
+  addEventListener('hashchange', () => location.reload());   // 手动改地址栏里的 #id 也会切换
+  let want = ''; try { want = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
+  const loadScript = src => new Promise(res => { const s = document.createElement('script'); s.src = src; s.onload = s.onerror = res; document.head.appendChild(s); });
+  const THREE_JS = ['build/three.min.js', 'examples/js/controls/OrbitControls.js', 'examples/js/objects/Sky.js'].map(f => 'https://cdn.jsdelivr.net/npm/three@0.128.0/' + f);
+
+  function showList(sites, err) {
+    $('listView').hidden = false;
+    if (err) { $('sites').innerHTML = `<p class="empty">地点列表加载失败，请刷新重试。</p>`; return; }
+    if (!sites.length) { $('sites').innerHTML = `<p class="empty">还没有生成任何地点。</p>`; return; }
+    $('listSub').textContent = `共 ${sites.length} 个地点 · 真实高程 · 卫星影像 · OpenStreetMap 路网`;
+    $('sites').innerHTML = sites.map(s => {
+      const km = Array.isArray(s.km_range) ? (s.km_range[0] === s.km_range[1] ? `${s.km_range[0]} km` : `${s.km_range[0]}–${s.km_range[1]} km`) : '';
+      return `<button class="card" type="button" data-id="${esc(s.id)}" aria-label="${esc(s.name)}，${esc(s.district)}，打开三维视图">
+        ${s.thumb ? `<img src="${esc(s.thumb)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
+        <div class="bd"><div class="nm"><h2>${esc(s.name)}</h2><span class="dist">${esc(s.district || '')}</span></div>
+        <div class="meta">${s.peak ? `<span class="chip plain">主峰 ${esc(s.peak)}${s.ele != null ? ` ${esc(s.ele)} m` : ''}</span>` : ''}
+          <span class="chip plain">${esc(s.routes)} 条路线</span>${km ? `<span class="chip plain">${esc(km)}</span>` : ''}
+          ${s.difficulty ? `<span class="chip d-${esc(s.difficulty)}">${esc(s.difficulty)}</span>` : ''}</div></div></button>`;
+    }).join('');
+    $('sites').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) nav(b.dataset.id); });
+    fetch('site/gzmap.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).then(m => drawMap(m, sites)).catch(() => {});   // 地图失败时只显示卡片
+  }
+
+  // 广州总览：区界 + 晕渲（等经纬投影，像素坐标与 gzrelief.jpg 一致）+ 每个地点一个标记，悬停/聚焦显示信息卡
+  function drawMap(M, sites) {
+    const [lat0, lat1, lon0, lon1] = M.bbox, [W, H] = M.img;
+    const P = (lon, lat) => [(lon - lon0) / (lon1 - lon0) * W, (lat1 - lat) / (lat1 - lat0) * H];
+    const ringD = r => 'M' + r.map(([lo, la]) => P(lo, la).map(v => v.toFixed(1)).join(' ')).join('L') + 'Z';
+    const dD = M.districts.map(d => d.rings.map(ringD).join(''));
+    const centroid = d => {   // 最大环的面积重心
+      const r = d.rings.reduce((a, b) => b.length > a.length ? b : a).map(([lo, la]) => P(lo, la));
+      let A = 0, cx = 0, cy = 0;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const f = r[j][0] * r[i][1] - r[i][0] * r[j][1]; A += f; cx += (r[j][0] + r[i][0]) * f; cy += (r[j][1] + r[i][1]) * f; }
+      return [cx / (3 * A), cy / (3 * A), Math.abs(A / 2)];
+    };
+    const byId = Object.fromEntries(sites.map(s => [s.id, s]));
+    const pts = sites.filter(s => M.sites[s.id]).map(s => ({ s, xy: P(M.sites[s.id][1], M.sites[s.id][0]) }));
+    const svg = $('mapSvg'), map = $('gzmap'), tip = $('mtip');
+    map.style.setProperty('--ar', `${W} / ${H}`); map.style.setProperty('--ar-n', W / H);
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.innerHTML = `<defs><clipPath id="gzclip"><path d="${dD.join('')}"/></clipPath></defs>
+      <g class="shadow"><g clip-path="url(#gzclip)"><rect class="land" width="${W}" height="${H}"/><image class="relief" href="site/gzrelief.jpg" width="${W}" height="${H}" preserveAspectRatio="none"/></g></g>
+      ${dD.map(d => `<path class="dpath" d="${d}"/>`).join('')}
+      ${M.districts.map(d => { const [x, y, a] = centroid(d); const fs = Math.max(15, Math.min(30, Math.sqrt(a) / 9)); return `<text class="dlabel" x="${x.toFixed(0)}" y="${y.toFixed(0)}" font-size="${fs.toFixed(0)}">${esc(d.name.replace(/区$/, ''))}</text>`; }).join('')}
+      ${pts.map(({ s, xy: [x, y] }) => `<g class="mk" data-id="${esc(s.id)}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})" tabindex="0" role="button" aria-label="${esc(s.name)}，${esc(s.district)}，打开三维视图">
+        <circle class="hit" r="22"/><circle class="ring" r="17"/><circle class="dot" r="9"/></g>`).join('')}`;
+    map.hidden = false;
+
+    let cur = null, pinned = false, lastPtr = 'mouse';
+    const card = id => $('sites').querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+    const mk = id => svg.querySelector(`.mk[data-id="${CSS.escape(id)}"]`);
+    function show(id, pin) {
+      const s = byId[id], g = mk(id); if (!s || !g) return;
+      if (cur && cur !== id) hide(true);
+      cur = id; pinned = !!pin;
+      g.classList.add('hl'); g.parentNode.appendChild(g);   // 置顶
+      const c = card(id); c?.classList.add('hl');
+      if (c && matchMedia('(min-width: 961px)').matches) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' });   // 桌面：右侧列表滚到对应卡片
+      const km = Array.isArray(s.km_range) ? (s.km_range[0] === s.km_range[1] ? `${s.km_range[0]} km` : `${s.km_range[0]}–${s.km_range[1]} km`) : '—';
+      tip.innerHTML = `${s.thumb ? `<img src="${esc(s.thumb)}" alt="">` : ''}<div class="bd"><h3>${esc(s.name)}<small>${esc(s.district || '')}</small></h3>
+        <dl>${s.peak ? `<dt>主峰</dt><dd>${esc(s.peak)}${s.ele != null ? ` · ${esc(s.ele)} m` : ''}</dd>` : ''}<dt>路线</dt><dd>${esc(s.routes)} 条 · ${esc(km)}</dd>
+        ${s.difficulty ? `<dt>难度</dt><dd>${esc(s.difficulty)}</dd>` : ''}</dl><div class="go">${pin ? '再点一次进入三维视图 →' : '点击进入三维视图 →'}</div></div>`;
+      tip.classList.toggle('pinned', pinned);
+      tip.hidden = false;
+      const mr = map.getBoundingClientRect(), gr = g.querySelector('.dot').getBoundingClientRect();
+      const cx = gr.left + gr.width / 2 - mr.left, cy = gr.top + gr.height / 2 - mr.top;
+      const tw = tip.offsetWidth, th = tip.offsetHeight, gap = 14;
+      let left = cx + gap, top = cy - th / 2;
+      if (left + tw > mr.width - 6) left = cx - gap - tw;
+      if (left < 6) { left = Math.max(6, Math.min(mr.width - tw - 6, cx - tw / 2)); top = cy - th - gap; if (top < 6) top = cy + gap; }
+      tip.style.left = left + 'px'; tip.style.top = Math.max(6, Math.min(mr.height - th - 6, top)) + 'px';
+    }
+    function hide(force) {
+      if (!cur || (pinned && !force)) return;
+      mk(cur)?.classList.remove('hl'); card(cur)?.classList.remove('hl');
+      cur = null; pinned = false; tip.hidden = true; tip.classList.remove('pinned');
+    }
+    svg.addEventListener('pointerdown', e => { lastPtr = e.pointerType; });
+    svg.addEventListener('pointerover', e => { const g = e.target.closest('.mk'); if (g && e.pointerType === 'mouse') show(g.dataset.id); });
+    svg.addEventListener('pointerout', e => { const g = e.target.closest('.mk'); if (g && e.pointerType === 'mouse' && !g.contains(e.relatedTarget)) hide(); });
+    svg.addEventListener('click', e => {
+      const g = e.target.closest('.mk');
+      if (!g) return hide(true);
+      const id = g.dataset.id;
+      if (lastPtr !== 'mouse' && !(cur === id && pinned)) return show(id, true);   // 触屏：第一下看信息，第二下进入
+      nav(id);
+    });
+    tip.addEventListener('click', () => { if (cur) nav(cur); });
+    svg.addEventListener('focusin', e => { const g = e.target.closest('.mk'); if (g) show(g.dataset.id); });
+    svg.addEventListener('focusout', () => hide(true));
+    svg.addEventListener('keydown', e => { const g = e.target.closest('.mk'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); nav(g.dataset.id); } });
+    $('sites').addEventListener('pointerover', e => { const c = e.target.closest('.card'); if (c && e.pointerType === 'mouse' && cur !== c.dataset.id) { hide(true); mk(c.dataset.id)?.classList.add('hl'); c.classList.add('hl'); cur = c.dataset.id; } });
+    $('sites').addEventListener('pointerleave', () => hide(true));
+    addEventListener('resize', () => hide(true));
+  }
+
+  fetch('site/sites.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(async sites => {
+    const site = want && sites.find(s => s.id === want);
+    if (!site) return showList(sites);
+    $('viewer').hidden = false;
+    $('back').addEventListener('click', () => nav(''));
+    for (const src of THREE_JS) await loadScript(src);
+    viewer(site);
+  }).catch(() => showList([], true));
+})();
+</script>

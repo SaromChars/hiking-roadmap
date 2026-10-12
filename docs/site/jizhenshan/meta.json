@@ -1,0 +1,14 @@
+{
+ "id": "jizhenshan",
+ "name": "鸡枕山—黄茶园",
+ "district": "从化",
+ "peak": "鸡枕山",
+ "ele": 1146.7,
+ "routes": 4,
+ "km_range": [
+  3.6,
+  17.3
+ ],
+ "difficulty": "难",
+ "thumb": "site/jizhenshan/thumb.jpg"
+}

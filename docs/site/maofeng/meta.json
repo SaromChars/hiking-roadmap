@@ -1,0 +1,14 @@
+{
+ "id": "maofeng",
+ "name": "帽峰山",
+ "district": "白云",
+ "peak": "帽峰山",
+ "ele": 534.9,
+ "routes": 5,
+ "km_range": [
+  1.3,
+  5.1
+ ],
+ "difficulty": "中",
+ "thumb": "site/maofeng/thumb.jpg"
+}

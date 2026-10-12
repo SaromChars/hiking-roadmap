@@ -1,0 +1,14 @@
+{
+ "id": "huolu",
+ "name": "火炉山",
+ "district": "天河",
+ "peak": "白架顶",
+ "ele": 327,
+ "routes": 5,
+ "km_range": [
+  1.3,
+  4.6
+ ],
+ "difficulty": "中",
+ "thumb": "site/huolu/thumb.jpg"
+}

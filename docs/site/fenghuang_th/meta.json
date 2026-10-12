@@ -1,0 +1,14 @@
+{
+ "id": "fenghuang_th",
+ "name": "凤凰山",
+ "district": "天河",
+ "peak": "凤凰山",
+ "ele": 373,
+ "routes": 5,
+ "km_range": [
+  1.4,
+  5.2
+ ],
+ "difficulty": "中",
+ "thumb": "site/fenghuang_th/thumb.jpg"
+}

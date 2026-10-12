@@ -1,0 +1,14 @@
+{
+ "id": "wuzhishan",
+ "name": "从化五指山",
+ "district": "从化",
+ "peak": "五指山（拇指）",
+ "ele": 1101,
+ "routes": 4,
+ "km_range": [
+  0.9,
+  8.2
+ ],
+ "difficulty": "难",
+ "thumb": "site/wuzhishan/thumb.jpg"
+}

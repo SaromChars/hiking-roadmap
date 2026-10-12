@@ -1,0 +1,14 @@
+{
+ "id": "dishuiyan",
+ "name": "滴水岩森林公园",
+ "district": "番禺",
+ "peak": "青萝嶂",
+ "ele": 198.2,
+ "routes": 4,
+ "km_range": [
+  1.5,
+  7.1
+ ],
+ "difficulty": "中",
+ "thumb": "site/dishuiyan/thumb.jpg"
+}

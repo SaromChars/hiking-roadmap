@@ -1,0 +1,14 @@
+{
+ "id": "scbg",
+ "name": "华南国家植物园",
+ "district": "天河",
+ "peak": null,
+ "ele": null,
+ "routes": 4,
+ "km_range": [
+  1.4,
+  3.9
+ ],
+ "difficulty": "易",
+ "thumb": "site/scbg/thumb.jpg"
+}

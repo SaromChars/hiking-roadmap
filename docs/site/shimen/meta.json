@@ -1,0 +1,14 @@
+{
+ "id": "shimen",
+ "name": "石门国家森林公园",
+ "district": "从化",
+ "peak": "天堂顶",
+ "ele": 1228,
+ "routes": 5,
+ "km_range": [
+  2.5,
+  16.6
+ ],
+ "difficulty": "难",
+ "thumb": "site/shimen/thumb.jpg"
+}

@@ -1,0 +1,14 @@
+{
+ "id": "wangzishan",
+ "name": "王子山森林公园",
+ "district": "花都",
+ "peak": "天葵岭",
+ "ele": 568,
+ "routes": 4,
+ "km_range": [
+  3.6,
+  11.1
+ ],
+ "difficulty": "难",
+ "thumb": "site/wangzishan/thumb.jpg"
+}

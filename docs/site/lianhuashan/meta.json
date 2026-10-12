@@ -1,0 +1,14 @@
+{
+ "id": "lianhuashan",
+ "name": "莲花山",
+ "district": "番禺",
+ "peak": "莲花山",
+ "ele": 108,
+ "routes": 5,
+ "km_range": [
+  1.2,
+  4.7
+ ],
+ "difficulty": "易",
+ "thumb": "site/lianhuashan/thumb.jpg"
+}

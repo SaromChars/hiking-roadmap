@@ -1,0 +1,14 @@
+{
+ "id": "fengyunling",
+ "name": "风云岭森林公园",
+ "district": "从化",
+ "peak": "风云岭",
+ "ele": 281.3,
+ "routes": 4,
+ "km_range": [
+  0.9,
+  3.8
+ ],
+ "difficulty": "易",
+ "thumb": "site/fengyunling/thumb.jpg"
+}

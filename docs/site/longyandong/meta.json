@@ -1,0 +1,14 @@
+{
+ "id": "longyandong",
+ "name": "龙眼洞森林公园",
+ "district": "天河",
+ "peak": "大坦岭",
+ "ele": 264,
+ "routes": 4,
+ "km_range": [
+  1.5,
+  7.2
+ ],
+ "difficulty": "中",
+ "thumb": "site/longyandong/thumb.jpg"
+}

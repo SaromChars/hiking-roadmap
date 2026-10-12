@@ -1,0 +1,14 @@
+{
+ "id": "tianlu",
+ "name": "天鹿湖森林公园",
+ "district": "黄埔",
+ "peak": "牛头山",
+ "ele": 361.9,
+ "routes": 4,
+ "km_range": [
+  3.6,
+  4.9
+ ],
+ "difficulty": "中",
+ "thumb": "site/tianlu/thumb.jpg"
+}

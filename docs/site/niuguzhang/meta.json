@@ -1,0 +1,14 @@
+{
+ "id": "niuguzhang",
+ "name": "牛牯嶂",
+ "district": "增城",
+ "peak": "牛牯嶂主峰",
+ "ele": 1084.3,
+ "routes": 3,
+ "km_range": [
+  5.4,
+  11.0
+ ],
+ "difficulty": "难",
+ "thumb": "site/niuguzhang/thumb.jpg"
+}

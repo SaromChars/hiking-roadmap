@@ -1,0 +1,14 @@
+{
+ "id": "dafushan",
+ "name": "大夫山森林公园",
+ "district": "番禺",
+ "peak": "大乌岗",
+ "ele": 226.6,
+ "routes": 5,
+ "km_range": [
+  1.7,
+  6.7
+ ],
+ "difficulty": "中",
+ "thumb": "site/dafushan/thumb.jpg"
+}
