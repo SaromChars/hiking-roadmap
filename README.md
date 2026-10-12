@@ -2,7 +2,7 @@
 
 广州 19 处徒步地点的三维地形与路线演示（three.js）。纯静态站点，GitHub Pages 托管。
 
-**在线地址**：https://saromchars.github.io/hiking-roadmap/
+**在线地址**：https://www.saromchars.tech/hiking-roadmap/
 
 ## 目录
 

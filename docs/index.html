@@ -1030,7 +1030,7 @@ async function viewer(SITE) {
   addEventListener('hashchange', () => location.reload());   // 手动改地址栏里的 #id 也会切换
   let want = ''; try { want = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
   const loadScript = src => new Promise(res => { const s = document.createElement('script'); s.src = src; s.onload = s.onerror = res; document.head.appendChild(s); });
-  const THREE_JS = ['build/three.min.js', 'examples/js/controls/OrbitControls.js', 'examples/js/objects/Sky.js'].map(f => 'https://cdn.jsdelivr.net/npm/three@0.128.0/' + f);
+  const THREE_JS = ['build/three.min.js', 'examples/js/controls/OrbitControls.js', 'examples/js/objects/Sky.js'].map(f => 'vendor/three@0.128.0/' + f);   // 同源托管：jsDelivr 在大陆部分网络连不上
 
   function showList(sites, err) {
     $('listView').hidden = false;
